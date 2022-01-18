@@ -8,12 +8,14 @@
  */
 
 use Luolongfei\App\Exceptions\LlfException;
-use Luolongfei\Lib\Argv;
-use Luolongfei\Lib\Config;
-use Luolongfei\Lib\Log;
-use Luolongfei\Lib\Env;
-use Luolongfei\Lib\Lang;
-use Luolongfei\Lib\PhpColor;
+use Luolongfei\Libs\Argv;
+use Luolongfei\Libs\Config;
+use Luolongfei\Libs\Log;
+use Luolongfei\Libs\Env;
+use Luolongfei\Libs\Lang;
+use Luolongfei\Libs\PhpColor;
+use Luolongfei\App\Console\MigrateEnvFile;
+use Luolongfei\App\Console\Upgrade;
 
 if (!function_exists('config')) {
     /**
@@ -26,7 +28,7 @@ if (!function_exists('config')) {
      */
     function config($key = '', $default = null)
     {
-        return Config::instance()->get($key, $default);
+        return Config::getInstance()->get($key, $default);
     }
 }
 
@@ -40,7 +42,7 @@ if (!function_exists('lang')) {
      */
     function lang($key = '')
     {
-        return Lang::instance()->get($key);
+        return Lang::getInstance()->get($key);
     }
 }
 
@@ -89,7 +91,7 @@ if (!function_exists('system_log')) {
             }
 
             // 尝试为消息着色
-            $c = PhpColor::instance()->getColorInstance();
+            $c = PhpColor::getInstance()->getColorInstance();
             echo $c($msg)->colorize();
 
             // 干掉着色标签
@@ -201,7 +203,7 @@ if (!function_exists('env')) {
      */
     function env($key = '', $default = null)
     {
-        return Env::instance()->get($key, $default);
+        return Env::getInstance()->get($key, $default);
     }
 }
 
@@ -216,7 +218,7 @@ if (!function_exists('get_argv')) {
      */
     function get_argv(string $name, string $default = '')
     {
-        return Argv::instance()->get($name, $default);
+        return Argv::getInstance()->get($name, $default);
     }
 }
 
@@ -228,17 +230,34 @@ if (!function_exists('system_check')) {
      */
     function system_check()
     {
-        if (!function_exists('putenv')) {
-            throw new LlfException(34520005);
-        }
-
         if (version_compare(PHP_VERSION, '7.0.0') < 0) {
             throw new LlfException(34520006);
         }
 
-        $envFile = ROOT_PATH . '/.env';
-        if (!file_exists($envFile)) {
-            throw new LlfException(copy(ROOT_PATH . '/.env.example', $envFile) ? 34520007 : 34520008);
+        // 如果是在云函数部署，则不需要检查这几项
+        if (IS_SCF) {
+            system_log('检测到运行环境为云函数，所有环境变量将直接从环境中读取，环境中找不到的变量，则直接从 .env.example 文件中读取');
+            system_log('如果是在腾讯云函数，可以参考此处修改或新增环境变量，无需重建：https://github.com/luolongfei/freenom/blob/main/resources/screenshot/scf03.png');
+            system_log('如果是在阿里云函数，可以直接在【函数详情】->【函数配置】->【环境信息】处编辑环境变量');
+        } else {
+            if (!function_exists('putenv')) {
+                throw new LlfException(34520005);
+            }
+
+            $envFile = ROOT_PATH . '/.env';
+            if (!file_exists($envFile)) {
+                throw new LlfException(copy(ROOT_PATH . '/.env.example', $envFile) ? 34520007 : 34520008);
+            }
+
+            // 检查当前 .env 文件版本是否过低，过低自动升级
+            MigrateEnvFile::getInstance()->handle();
+        }
+
+        // 是否有新版可用
+        if (config('new_version_detection')) {
+            Upgrade::getInstance()->handle();
+        } else {
+            system_log('由于你没有开启升级提醒功能，故无法在有新版本可用时第一时间收到通知。将 .env 文件中 NEW_VERSION_DETECTION 的值改为 1 即可重新开启相关功能。');
         }
 
         if (!extension_loaded('curl')) {

@@ -7,21 +7,16 @@
  * @time 16:30
  */
 
-namespace Luolongfei\Lib;
+namespace Luolongfei\Libs;
 
-class Lang
+class Lang extends Base
 {
-    /**
-     * @var Lang
-     */
-    protected static $instance;
-
     /**
      * @var array
      */
     public $lang;
 
-    public function __construct()
+    public function init()
     {
         $this->lang = require sprintf('%s/lang/%s.php', RESOURCES_PATH, config('locale'));
     }
@@ -58,17 +53,5 @@ class Lang
         }
 
         return $lang;
-    }
-
-    /**
-     * @return Lang
-     */
-    public static function instance()
-    {
-        if (!self::$instance instanceof self) {
-            self::$instance = new self();
-        }
-
-        return self::$instance;
     }
 }
